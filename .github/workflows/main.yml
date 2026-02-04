@@ -5,6 +5,10 @@ on:
     - cron: '0 11 */7 * *'   # UTC 11:00 = 北京 19:00
   workflow_dispatch:
 
+# 🔐 关键：给写仓库权限
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -13,13 +17,15 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 后续如果要 commit 很重要
 
       - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 🧩 Install system deps
+      - name: 🧩 Install system deps (Xvfb + Chrome deps)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -32,18 +38,35 @@ jobs:
             libxrandr2 \
             libxdamage1 \
             libgbm1 \
-            libgtk-3-0
+            libgtk-3-0 \
+            fonts-liberation
 
       - name: 📦 Install Python deps
         run: |
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 🚀 Run bot
+      - name: 🚀 Run bot (Xvfb via pyvirtualdisplay)
         env:
           LUNES_EMAIL: ${{ secrets.LUNES_EMAIL }}
           LUNES_PASSWORD: ${{ secrets.LUNES_PASSWORD }}
         run: |
           python main.py
+
+      # 📌 可选：如果你后续会写文件并提交
+      - name: 📤 Commit changes (if any)
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git add .
+            git commit -m "chore: update data from workflow run"
+            git push
+          else
+            echo "ℹ️ No changes to commit"
+          fi
 
       - name: 📤 Upload screenshots
         if: always()
