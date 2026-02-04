@@ -15,8 +15,11 @@ os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 
 def setup_xvfb():
+    """
+    启动 Xvfb（虚拟显示）并修复 python-xlib 解析错误
+    """
     if platform.system().lower() == "linux" and not os.environ.get("DISPLAY"):
-        display = Display(visible=False, size=(1920, 1080))
+        display = Display(visible=False, size=(1920, 1080), use_xauth=False)
         display.start()
         os.environ["DISPLAY"] = display.new_display_var
         print("🖥️ Xvfb 已启动")
@@ -53,12 +56,7 @@ def main():
     display = setup_xvfb()
 
     try:
-        with SB(
-            uc=True,
-            test=True,
-            headless=False,   # ⚠️ 关键：不要 headless
-        ) as sb:
-
+        with SB(uc=True, test=True, headless=False) as sb:  # ⚠️ 非 headless
             print("🚀 打开登录页")
             sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
             sb.wait_for_element_visible("input[type='email']", timeout=30)
@@ -67,19 +65,16 @@ def main():
             sb.type("input[type='email']", EMAIL)
             sb.type("input[type='password']", PASSWORD)
 
-            # 触发 Turnstile（不指望看到勾）
-            print("🛡️ 触发 Turnstile")
+            # 触发 Turnstile（Managed / Invisible，不看 token）
+            print("🛡️ 触发 Cloudflare Turnstile")
             try:
                 sb.uc_gui_click_captcha()
             except Exception as e:
                 print("⚠️ Turnstile 交互异常:", e)
 
             time.sleep(2)
-
-            print("🔐 提交登录")
             sb.click("button[type='submit']")
             time.sleep(5)
-
             shot(sb, "02_after_login.png")
 
             cf_clearance = get_cookie(sb, "cf_clearance")
@@ -95,7 +90,6 @@ def main():
             sb.open(TARGET_URL)
             sb.wait_for_element_visible("body", timeout=30)
             time.sleep(3)
-
             shot(sb, "03_server_page.png")
 
             if "/servers/" not in sb.get_current_url():
@@ -106,7 +100,3 @@ def main():
     finally:
         if display:
             display.stop()
-
-
-if __name__ == "__main__":
-    main()
