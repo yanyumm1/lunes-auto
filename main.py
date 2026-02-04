@@ -20,9 +20,18 @@ def shot(sb, name):
 
 def get_cf_clearance(sb):
     for c in sb.get_cookies():
-        if c["name"] == "cf_clearance":
-            return c["value"]
+        if c.get("name") == "cf_clearance":
+            return c.get("value")
     return None
+
+
+def slow_type(sb, selector, text, delay=0.06):
+    """模拟真人逐字输入"""
+    sb.click(selector)
+    sb.clear(selector)
+    for ch in text:
+        sb.send_keys(selector, ch)
+        time.sleep(delay)
 
 
 def main():
@@ -32,7 +41,7 @@ def main():
     with SB(
         uc=True,
         test=True,
-        headless=True,   # ✅ GA 必须用 headless
+        headless=True,   # ✅ GitHub Actions 必须 headless
     ) as sb:
 
         print("🚀 打开登录页")
@@ -41,9 +50,12 @@ def main():
 
         shot(sb, "01_login_page.png")
 
-        # ===== 输入账号密码（不提交）=====
-        sb.type("input[type='email']", EMAIL, delay=60)
-        sb.type("input[type='password']", PASSWORD, delay=60)
+        # ===== 输入账号密码（慢速，像真人）=====
+        print("⌨️ 输入账号")
+        slow_type(sb, "input[type='email']", EMAIL)
+
+        print("⌨️ 输入密码")
+        slow_type(sb, "input[type='password']", PASSWORD)
 
         time.sleep(1)
 
@@ -56,19 +68,19 @@ def main():
             try:
                 sb.uc_gui_click_captcha()
             except Exception as e:
-                print("⚠️ 点击异常:", e)
+                print("⚠️ CF 点击异常:", e)
 
             time.sleep(4)
             cf_clearance = get_cf_clearance(sb)
             print("🧩 cf_clearance:", cf_clearance)
 
             if cf_clearance:
-                print("✅ CF 已通过")
+                print("✅ Cloudflare 已通过")
                 break
 
         if not cf_clearance:
             shot(sb, "02_cf_failed.png")
-            raise RuntimeError("❌ CF 未通过，终止")
+            raise RuntimeError("❌ Cloudflare 未通过，终止")
 
         shot(sb, "03_cf_passed.png")
 
