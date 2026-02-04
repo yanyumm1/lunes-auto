@@ -4,7 +4,6 @@ import platform
 from seleniumbase import SB
 from pyvirtualdisplay import Display
 
-# ====== 配置 ======
 LOGIN_URL = "https://betadash.lunes.host/login?next=/"
 TARGET_URL = "https://betadash.lunes.host/servers/63531"
 
@@ -30,6 +29,14 @@ def shot(sb, name):
     print(f"📸 {path}")
 
 
+def get_cf_clearance(sb):
+    cookies = sb.get_cookies()
+    for c in cookies:
+        if c["name"] == "cf_clearance":
+            return c["value"]
+    return None
+
+
 def main():
     if not EMAIL or not PASSWORD:
         raise RuntimeError("❌ 缺少 LUNES_EMAIL / LUNES_PASSWORD")
@@ -39,9 +46,8 @@ def main():
     try:
         with SB(
             uc=True,
-            locale="en",
-            headless=False,     # ❗ CI 下也保持 headful（Xvfb）
-            test=True
+            test=True,
+            headless=False,   # ⚠️ CI 下也保持 headful（Xvfb）
         ) as sb:
 
             print("🚀 打开登录页")
@@ -50,43 +56,61 @@ def main():
 
             shot(sb, "01_login_page.png")
 
-            # ===== 输入账号 =====
-            sb.click("input[type='email']")
+            # ===== 输入账号密码（不提交）=====
             sb.type("input[type='email']", EMAIL, delay=60)
-
-            sb.click("input[type='password']")
             sb.type("input[type='password']", PASSWORD, delay=60)
 
             time.sleep(1)
 
-            sb.click("button[type='submit']")
-            print("🔐 已提交登录")
+            # ===== 处理 Cloudflare Turnstile =====
+            print("🛡️ 等待 / 触发 Cloudflare Turnstile")
 
-            # ===== 等登录完成 =====
+            cf_clearance = None
+            for attempt in range(1, 4):
+                try:
+                    print(f"🧠 尝试 CF 勾选，第 {attempt} 次")
+                    sb.uc_gui_click_captcha()
+                    time.sleep(4)
+                except Exception as e:
+                    print(f"⚠️ 点击异常: {e}")
+
+                cf_clearance = get_cf_clearance(sb)
+                print("🧩 cf_clearance:", cf_clearance)
+
+                if cf_clearance:
+                    print("✅ CF 已通过")
+                    break
+
+            if not cf_clearance:
+                shot(sb, "02_cf_failed.png")
+                raise RuntimeError("❌ CF 未通过，终止登录")
+
+            shot(sb, "03_cf_passed.png")
+
+            # ===== 提交登录 =====
+            print("🔐 提交登录表单")
+            sb.click("button[type='submit']")
+
             sb.wait_for_element_visible("body", timeout=30)
             time.sleep(3)
 
-            shot(sb, "02_after_login.png")
+            shot(sb, "04_after_login.png")
 
-            # ===== 访问服务器页 =====
+            # ===== 打开服务器页 =====
             print("➡️ 打开服务器页面")
             sb.uc_open_with_reconnect(TARGET_URL, reconnect_time=6)
             sb.wait_for_element_visible("body", timeout=30)
             time.sleep(3)
 
-            shot(sb, "03_server_page.png")
+            shot(sb, "05_server_page.png")
 
-            # ===== 简单成功判断 =====
             url = sb.get_current_url()
-            title = sb.get_title()
+            print("📍 当前 URL:", url)
 
-            print("📍 URL:", url)
-            print("📄 Title:", title)
-
-            if "/servers/" in url:
-                print("✅ 登录并访问成功")
-            else:
+            if "/servers/" not in url:
                 raise RuntimeError("❌ 未成功进入服务器页面")
+
+            print("🎉 登录 + 页面访问成功")
 
     finally:
         if display:
