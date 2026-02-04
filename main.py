@@ -18,7 +18,7 @@ SCREENSHOT_DIR = "screenshots"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 # --------------------------
-# 设置 stdout 实时输出
+# 实时输出
 # --------------------------
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -63,6 +63,19 @@ def is_logged_in(sb):
     return True
 
 # --------------------------
+# 等待 token 生成
+# --------------------------
+def wait_for_tokens(sb, timeout=15):
+    for i in range(timeout):
+        cf_token = sb.get_attribute("#cf-chl-widget-utu5n_response", "value")
+        g_token = sb.get_attribute("#cf-chl-widget-utu5n_g_response", "value")
+        if cf_token and g_token:
+            print("✅ cf-turnstile-response + g-recaptcha-response 已生成", flush=True)
+            return cf_token, g_token
+        time.sleep(1)
+    raise RuntimeError("❌ cf-turnstile-response 或 g-recaptcha-response 未生成，无法登录")
+
+# --------------------------
 # 主流程
 # --------------------------
 def main():
@@ -72,34 +85,36 @@ def main():
     display = setup_xvfb()
 
     try:
-        # SB() 轻量模式，不支持 demo_mode 或 set_slow_mo
         with SB(uc=True, test=True, headless=False) as sb:
             print("🌐 SeleniumBase 浏览器已创建", flush=True)
 
             # ===== 打开登录页 =====
             print("🚀 打开登录页", flush=True)
             sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
-            time.sleep(1)  # 慢速模拟
             sb.wait_for_element_visible("input[type='email']", timeout=30)
             shot(sb, "01_login_page.png")
 
             # ===== 输入账号密码 =====
-            sb.type("input[type='email']", EMAIL)
+            sb.type("#email", EMAIL)
             time.sleep(0.5)
-            sb.type("input[type='password']", PASSWORD)
+            sb.type("#password", PASSWORD)
             time.sleep(0.5)
 
-            # ===== Cloudflare Turnstile =====
+            # ===== 触发 Turnstile / captcha =====
             print("🛡️ 触发 Cloudflare Turnstile", flush=True)
             try:
                 sb.uc_gui_click_captcha()
             except Exception as e:
                 print(f"⚠️ Turnstile 交互异常: {e}", flush=True)
-            time.sleep(2)
+
+            # ===== 等待两个 token 生成 =====
+            cf_token, g_token = wait_for_tokens(sb, timeout=20)
+            print("cf-token:", cf_token, flush=True)
+            print("g-token:", g_token, flush=True)
 
             # ===== 提交登录 =====
             print("🔐 提交登录", flush=True)
-            sb.click("button[type='submit']")
+            sb.click("button.submit-btn")
             time.sleep(5)
             shot(sb, "02_after_login.png")
 
