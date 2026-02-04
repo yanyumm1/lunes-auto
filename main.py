@@ -72,43 +72,48 @@ def main():
     display = setup_xvfb()
 
     try:
-        # ✅ 去掉 demo_mode 参数，使用 set_slow_mo 代替
+        # SB() 轻量模式，不支持 demo_mode 或 set_slow_mo
         with SB(uc=True, test=True, headless=False) as sb:
             print("🌐 SeleniumBase 浏览器已创建", flush=True)
 
-            # 设置每步动作慢速演示，方便日志观察
-            sb.set_slow_mo(1)  # 每步操作间隔 1 秒
-
+            # ===== 打开登录页 =====
             print("🚀 打开登录页", flush=True)
             sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
+            time.sleep(1)  # 慢速模拟
             sb.wait_for_element_visible("input[type='email']", timeout=30)
             shot(sb, "01_login_page.png")
 
+            # ===== 输入账号密码 =====
             sb.type("input[type='email']", EMAIL)
+            time.sleep(0.5)
             sb.type("input[type='password']", PASSWORD)
+            time.sleep(0.5)
 
-            # 触发 Turnstile（Managed / Invisible，不依赖 DOM token）
+            # ===== Cloudflare Turnstile =====
             print("🛡️ 触发 Cloudflare Turnstile", flush=True)
             try:
                 sb.uc_gui_click_captcha()
             except Exception as e:
                 print(f"⚠️ Turnstile 交互异常: {e}", flush=True)
-
             time.sleep(2)
+
+            # ===== 提交登录 =====
             print("🔐 提交登录", flush=True)
             sb.click("button[type='submit']")
             time.sleep(5)
             shot(sb, "02_after_login.png")
 
+            # ===== 检查 cookie =====
             cf_clearance = get_cookie(sb, "cf_clearance")
             print("🧩 cf_clearance:", bool(cf_clearance), flush=True)
 
+            # ===== 登录成功判断 =====
             if not is_logged_in(sb):
                 shot(sb, "02_login_failed.png")
                 raise RuntimeError("❌ 登录失败（后端未建 session）")
-
             print("✅ 登录成功", flush=True)
 
+            # ===== 打开服务器页 =====
             print("➡️ 打开服务器页", flush=True)
             sb.open(TARGET_URL)
             sb.wait_for_element_visible("body", timeout=30)
@@ -117,13 +122,11 @@ def main():
 
             if "/servers/" not in sb.get_current_url():
                 raise RuntimeError("❌ 服务器页访问失败")
-
             print("🎉 登录 + 页面访问全部成功", flush=True)
 
     finally:
         if display:
             display.stop()
-
 
 if __name__ == "__main__":
     main()
