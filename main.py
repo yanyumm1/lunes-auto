@@ -56,12 +56,12 @@ def main():
     display = setup_xvfb()
 
     try:
+        # ==== 只使用 SB() 支持的参数 ====
         with SB(
             uc=True,
             test=True,
             headless=False,
-            incognito=True,
-            maximize_window=True,
+            incognito=True
         ) as sb:
             print("🌐 SeleniumBase UC 浏览器已创建", flush=True)
 
@@ -91,7 +91,7 @@ def main():
             print("🔐 提交登录表单", flush=True)
             sb.click("button[type='submit']")
 
-            # ⚠️ 给 Cloudflare 行为评分时间（非常重要）
+            # ⚠️ 给 Cloudflare 行为评分时间
             print("⏳ 等待 Cloudflare 行为判定", flush=True)
             time.sleep(10)
             shot(sb, "02_after_submit.png")
