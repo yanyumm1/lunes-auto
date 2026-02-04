@@ -53,19 +53,9 @@ jobs:
           LUNES_EMAIL: ${{ secrets.LUNES_EMAIL }}
           LUNES_PASSWORD: ${{ secrets.LUNES_PASSWORD }}
         run: |
-          python main.py
+          python -u main.py
 
-      - name: 📤 Commit changes (if any)
-        if: always()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git add .
-            git commit -m "chore: update data from workflow run"
-            git push
-          else
-            echo "ℹ️ No changes to commit"
+      
 
       - name: 📤 Upload screenshots
         if: always()
