@@ -40,17 +40,18 @@ def get_cookie(sb, name):
 
 
 def can_access_target(sb):
+    print("🔎 尝试访问受保护页面", flush=True)
     sb.open(TARGET_URL)
     time.sleep(6)
     url = sb.get_current_url()
-    print(f"🔎 当前 URL: {url}", flush=True)
+    print(f"🔗 当前 URL: {url}", flush=True)
     return "/servers" in url and "/login" not in url
 
 
 # ========= 主逻辑 =========
 def main():
     if not EMAIL or not PASSWORD:
-        raise RuntimeError("❌ 缺少账号环境变量")
+        raise RuntimeError("❌ 缺少 LUNES_EMAIL / LUNES_PASSWORD")
 
     display = setup_xvfb()
 
@@ -59,12 +60,12 @@ def main():
             uc=True,
             test=True,
             headless=False,
-            locale="en",
             incognito=True,
+            maximize_window=True,
         ) as sb:
-            print("🌐 SeleniumBase 浏览器已创建", flush=True)
+            print("🌐 SeleniumBase UC 浏览器已创建", flush=True)
 
-            # --- 打开登录页 ---
+            # --- 登录页 ---
             print("🚀 打开登录页", flush=True)
             sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
             sb.wait_for_element_visible("#email", timeout=30)
@@ -72,40 +73,41 @@ def main():
             shot(sb, "01_login_page.png")
 
             # --- 输入账号密码 ---
-            sb.type("#email", EMAIL, timeout=10)
+            print("⌨️ 输入账号密码", flush=True)
+            sb.type("#email", EMAIL)
             time.sleep(0.5)
-            sb.type("#password", PASSWORD, timeout=10)
+            sb.type("#password", PASSWORD)
             time.sleep(1)
 
-            # --- 尝试触发 Turnstile（不强求） ---
-            print("🛡️ 尝试触发 Turnstile", flush=True)
+            # --- 尝试触发 CF 行为（不强制） ---
+            print("🛡️ 尝试触发 Cloudflare Turnstile", flush=True)
             try:
                 sb.uc_gui_click_captcha()
                 time.sleep(2)
             except Exception:
-                pass
+                print("ℹ️ 未检测到可点击的 captcha", flush=True)
 
             # --- 提交 ---
-            print("🔐 提交登录", flush=True)
+            print("🔐 提交登录表单", flush=True)
             sb.click("button[type='submit']")
 
             # ⚠️ 给 Cloudflare 行为评分时间（非常重要）
+            print("⏳ 等待 Cloudflare 行为判定", flush=True)
             time.sleep(10)
             shot(sb, "02_after_submit.png")
 
-            # --- 观察 cf_clearance ---
+            # --- cf_clearance 只是参考，不作为成功依据 ---
             cf_clearance = get_cookie(sb, "cf_clearance")
             print("🧩 cf_clearance:", bool(cf_clearance), flush=True)
 
-            # --- 最终判定：访问受保护页面 ---
-            print("➡️ 验证是否登录成功", flush=True)
+            # --- 真正的成功判定 ---
             if can_access_target(sb):
                 shot(sb, "03_server_page.png")
                 print("🎉 登录成功（Cloudflare Managed Mode 放行）", flush=True)
                 return
 
             shot(sb, "04_login_failed.png")
-            raise RuntimeError("❌ Cloudflare 未放行（行为评分不足）")
+            raise RuntimeError("❌ Cloudflare 未放行（仍被重定向回登录页）")
 
     finally:
         if display:
