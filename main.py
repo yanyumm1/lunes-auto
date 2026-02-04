@@ -1,6 +1,8 @@
 import os
 import time
+import platform
 from seleniumbase import SB
+from pyvirtualdisplay import Display
 
 LOGIN_URL = "https://betadash.lunes.host/login?next=/"
 TARGET_URL = "https://betadash.lunes.host/servers/63531"
@@ -12,18 +14,20 @@ SCREENSHOT_DIR = "screenshots"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 
+def setup_xvfb():
+    if platform.system().lower() == "linux" and not os.environ.get("DISPLAY"):
+        display = Display(visible=False, size=(1920, 1080))
+        display.start()
+        os.environ["DISPLAY"] = display.new_display_var
+        print("🖥️ Xvfb 已启动")
+        return display
+    return None
+
+
 def shot(sb, name):
     path = f"{SCREENSHOT_DIR}/{name}"
     sb.save_screenshot(path)
     print(f"📸 {path}")
-
-
-def slow_type(sb, selector, text, delay=0.06):
-    sb.click(selector)
-    sb.clear(selector)
-    for ch in text:
-        sb.send_keys(selector, ch)
-        time.sleep(delay)
 
 
 def get_cookie(sb, name):
@@ -33,96 +37,75 @@ def get_cookie(sb, name):
     return None
 
 
-def wait_for_turnstile_token(sb, timeout=20):
-    """等待 cf-turnstile-response 被写入"""
-    print("⏳ 等待 Turnstile token 生成")
-    for i in range(timeout):
-        try:
-            val = sb.get_attribute(
-                "input[name='cf-turnstile-response']",
-                "value"
-            )
-            if val and len(val) > 20:
-                print("✅ Turnstile token 已生成")
-                return val
-        except Exception:
-            pass
-        time.sleep(1)
-
-    return None
-
-
 def is_logged_in(sb):
-    """判断是否真的登录"""
     url = sb.get_current_url()
     if "/login" in url:
         return False
-
-    # 登录后一般不会再看到 email 输入框
     if sb.is_element_present("input[type='email']"):
         return False
-
     return True
 
 
 def main():
     if not EMAIL or not PASSWORD:
-        raise RuntimeError("❌ 缺少 LUNES_EMAIL / LUNES_PASSWORD")
+        raise RuntimeError("❌ 缺少账号环境变量")
 
-    with SB(uc=True, headless=True, test=True) as sb:
+    display = setup_xvfb()
 
-        print("🚀 打开登录页")
-        sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
-        sb.wait_for_element_visible("input[type='email']", timeout=30)
+    try:
+        with SB(
+            uc=True,
+            test=True,
+            headless=False,   # ⚠️ 关键：不要 headless
+        ) as sb:
 
-        shot(sb, "01_login_page.png")
+            print("🚀 打开登录页")
+            sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
+            sb.wait_for_element_visible("input[type='email']", timeout=30)
+            shot(sb, "01_login_page.png")
 
-        slow_type(sb, "input[type='email']", EMAIL)
-        slow_type(sb, "input[type='password']", PASSWORD)
+            sb.type("input[type='email']", EMAIL)
+            sb.type("input[type='password']", PASSWORD)
 
-        # ==== 触发 Turnstile ====
-        print("🛡️ 触发 Cloudflare Turnstile")
-        try:
-            sb.uc_gui_click_captcha()
-        except Exception as e:
-            print("⚠️ Turnstile 点击异常:", e)
+            # 触发 Turnstile（不指望看到勾）
+            print("🛡️ 触发 Turnstile")
+            try:
+                sb.uc_gui_click_captcha()
+            except Exception as e:
+                print("⚠️ Turnstile 交互异常:", e)
 
-        # ==== 等 token ====
-        token = wait_for_turnstile_token(sb)
-        cf_clearance = get_cookie(sb, "cf_clearance")
+            time.sleep(2)
 
-        print("🧩 cf_clearance:", bool(cf_clearance))
-        print("🧪 turnstile token:", bool(token))
+            print("🔐 提交登录")
+            sb.click("button[type='submit']")
+            time.sleep(5)
 
-        shot(sb, "03_cf_state.png")
+            shot(sb, "02_after_login.png")
 
-        if not token:
-            raise RuntimeError("❌ Turnstile token 未生成，无法登录")
+            cf_clearance = get_cookie(sb, "cf_clearance")
+            print("🧩 cf_clearance:", bool(cf_clearance))
 
-        # ==== 提交登录 ====
-        print("🔐 提交登录")
-        sb.click("button[type='submit']")
-        time.sleep(5)
+            if not is_logged_in(sb):
+                shot(sb, "02_login_failed.png")
+                raise RuntimeError("❌ 登录失败（后端未建 session）")
 
-        shot(sb, "04_after_login.png")
+            print("✅ 登录成功")
 
-        if not is_logged_in(sb):
-            shot(sb, "04_login_failed.png")
-            raise RuntimeError("❌ 登录失败（后端未接受 Turnstile）")
+            print("➡️ 打开服务器页")
+            sb.open(TARGET_URL)
+            sb.wait_for_element_visible("body", timeout=30)
+            time.sleep(3)
 
-        print("✅ 登录成功")
+            shot(sb, "03_server_page.png")
 
-        # ==== 打开服务器页 ====
-        sb.open(TARGET_URL)
-        sb.wait_for_element_visible("body", timeout=30)
-        time.sleep(3)
+            if "/servers/" not in sb.get_current_url():
+                raise RuntimeError("❌ 服务器页访问失败")
 
-        shot(sb, "05_server_page.png")
+            print("🎉 登录 + 页面访问全部成功")
 
-        if "/servers/" not in sb.get_current_url():
-            raise RuntimeError("❌ 无法访问服务器页面")
-
-        print("🎉 已成功登录并访问服务器页")
+    finally:
+        if display:
+            display.stop()
 
 
 if __name__ == "__main__":
