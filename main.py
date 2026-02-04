@@ -8,8 +8,8 @@ from pyvirtualdisplay import Display
 EMAIL = os.getenv("LUNES_EMAIL")
 PASSWORD = os.getenv("LUNES_PASSWORD")
 
-LOGIN_URL = "https://dashboard.katabump.com/login"
-TARGET_URL = "https://dashboard.katabump.com/servers"
+LOGIN_URL = "https://betadash.lunes.host/login?next=/"
+TARGET_URL = "https://betadash.lunes.host/servers/63531"
 
 SCREENSHOT_DIR = "screenshots"
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
