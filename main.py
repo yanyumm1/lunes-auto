@@ -72,9 +72,12 @@ def main():
     display = setup_xvfb()
 
     try:
-        # ✅ demo_mode=True 会打印每一步操作
-        with SB(uc=True, test=True, headless=False, demo_mode=True) as sb:
+        # ✅ 去掉 demo_mode 参数，使用 set_slow_mo 代替
+        with SB(uc=True, test=True, headless=False) as sb:
             print("🌐 SeleniumBase 浏览器已创建", flush=True)
+
+            # 设置每步动作慢速演示，方便日志观察
+            sb.set_slow_mo(1)  # 每步操作间隔 1 秒
 
             print("🚀 打开登录页", flush=True)
             sb.uc_open_with_reconnect(LOGIN_URL, reconnect_time=6)
@@ -120,6 +123,7 @@ def main():
     finally:
         if display:
             display.stop()
+
 
 if __name__ == "__main__":
     main()
