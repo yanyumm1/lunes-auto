@@ -1,70 +1,53 @@
-name: 自动增加服务器时间
+name: Lunes Auto Login
 
 on:
-  workflow_dispatch: # 允许在 Actions 页面手动触发此工作流，方便测试
   schedule:
-    # 使用 CRON 表达式定义定时任务，所有时间均为 UTC 时间。
-    # '0 15 3,8,13,18,23,28 * *' 表示每月的 3、8、13、18、23、28 日 UTC 15:00 执行。
-    # 转换为韩国/日本时间 (UTC+9) 就是次日 00:00。
-    - cron: '0 12 1,4,8,12,16,20,24,28 * *'
-
-permissions:
-  contents: write
+    - cron: '0 11 */7 * *'   # UTC 11:00 = 北京 19:00
+  workflow_dispatch:
 
 jobs:
-  add_time:
-    runs-on: ubuntu-latest # 在最新的 Ubuntu 环境上运行
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - name: Checkout repository # 步骤1: 检出（下载）你的代码到运行环境中
+      - name: 📥 Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python # 步骤2: 设置 Python 环境
+      - name: 🐍 Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x' # 使用最新的 Python 3
+          python-version: '3.11'
 
-      - name: Install Playwright and dependencies # 步骤3: 安装 Playwright 及其浏览器依赖
+      - name: 🧩 Install system deps
         run: |
-          pip install playwright
-          playwright install --with-deps chromium # 安装 Chromium 浏览器及其运行所需的所有依赖
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxrandr2 \
+            libxdamage1 \
+            libgbm1 \
+            libgtk-3-0
 
-      - name: Run Time Adder Script # 步骤4: 运行你的 Python 脚本
+      - name: 📦 Install Python deps
+        run: |
+          pip install -r requirements.txt
+
+      - name: 🚀 Run bot
         env:
-          # 从 GitHub Secrets 读取环境变量，这些值绝不会在日志中明文显示
-          # 优先使用 Cookie 登录
-          REMEMBER_WEB_COOKIE: ${{ secrets.REMEMBER_WEB_COOKIE }}
-          # 如果 Cookie 失效或未设置，则使用下面的邮箱和密码
-          PTERODACTYL_EMAIL: ${{ secrets.PTERODACTYL_EMAIL }}
-          PTERODACTYL_PASSWORD: ${{ secrets.PTERODACTYL_PASSWORD }}
-        run: python main.py
+          LUNES_EMAIL: ${{ secrets.LUNES_EMAIL }}
+          LUNES_PASSWORD: ${{ secrets.LUNES_PASSWORD }}
+        run: |
+          python main.py
 
-      - name: Upload error artifacts # 步骤5: 如果脚本运行失败，上传截图用于调试
-        if: failure() # 仅在上一步失败时运行
+      - name: 📤 Upload screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: error-screenshots # 上传后的文件包名称
-          path: "*.png" # 上传所有以 .png 结尾的文件
-
-      - name: Commit time.txt to repo
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          if [ ! -f time.txt ]; then
-            echo "首次生成时间：$(date +'%Y-%m-%d %H:%M:%S')" > time.txt
-          else
-            echo "$(date +'%Y-%m-%d %H:%M:%S')" > time.txt
-          fi
-
-          git add time.txt
-
-          if git diff --cached --quiet
-          then
-            echo "无变化，无需提交"
-          else
-            git commit -m "⏱️ 更新时间文件: $(date +'%Y-%m-%d %H:%M:%S')"
-            git push origin HEAD:main
-          fi
+          name: screenshots
+          path: screenshots/
