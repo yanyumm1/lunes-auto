@@ -261,14 +261,15 @@ def _find_server_id_and_go_server_page(sb: SB) -> Tuple[Optional[str], bool]:
 
     # ✅ 进入 server 页面：优先 click（模拟人）
     try:
-        print(f"🧭 提取到 server_id={server_id}，优先点击 server-card 跳转...")  # FIX
+        print(f"🧭 提取到 server_id，优先点击 server-card 跳转...")  # FIX
 
         url_before = (sb.get_current_url() or "").strip()
         clicked = _robust_click(sb, SERVER_CARD_LINK_SEL, tries=3, sleep_s=0.7)  # FIX
         url_after = (sb.get_current_url() or "").strip()
 
         print(f"🔎 URL(before)={url_before}")  # FIX
-        print(f"🔎 URL(after )={url_after}")  # FIX
+        # todo 这里应该不用打印了 你可以放开
+        #print(f"🔎 URL(after )={url_after}")  # FIX
 
         if not clicked:
             raise Exception("robust_click failed")
@@ -493,7 +494,6 @@ def main():
                     msg = (
                         f"✅ Lunes BetaDash 登录成功\n"
                         f"账号：{safe_email}\n"
-                        f"server_id：{server_id or '未提取到'}\n"
                         f"welcome：{welcome_text or '未读取到'}\n"
                         f"退出：{'✅ 成功' if logout_ok else '❌ 失败'}\n"
                         f"当前页：{url_now}\n"
